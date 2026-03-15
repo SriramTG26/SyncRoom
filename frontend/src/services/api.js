@@ -1,4 +1,4 @@
-const BASE_URL = "https://syncroom-backend-dbz4.onrender.com";
+const BASE_URL = "https://syncroom-backend-dbz4.onrender.com/api";
 
 const request = async (endpoint, options = {}) => {
   const token = localStorage.getItem("token");
