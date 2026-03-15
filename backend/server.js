@@ -20,12 +20,16 @@ const allowedOrigins = [
   "http://localhost:5173",
 ];
 
-const io = new Server(httpServer, {
+const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: [
+      "https://sync-room-gamma.vercel.app",
+      "http://localhost:5173",
+    ],
     methods: ["GET", "POST"],
     credentials: true,
   },
+  transports: ["websocket", "polling"],
 });
 
 // Middleware

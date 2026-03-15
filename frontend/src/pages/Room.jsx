@@ -52,9 +52,9 @@ const [showEmoji, setShowEmoji] = useState(false);
 const emojiRef = useRef(null);
   // ── current user ──
   const currentUser = (() => {
-    try { return JSON.parse(localStorage.getItem("user")) || {}; }
-    catch { return {}; }
-  })();
+  try { return JSON.parse(localStorage.getItem("user")) || {}; }
+  catch { return {}; }
+})();
 
   const accentHex = {
     purple:'#7c3aed', cyan:'#22d3ee',
@@ -70,14 +70,14 @@ const emojiRef = useRef(null);
         setRoomCode(room.code || '');
         if (room.currentVideo?.videoId) setVideoId(room.currentVideo.videoId);
         if (room.members) {
-          setMembers(room.members.map(m => ({
-            id:       m.user?._id || m.user,
-            name:     m.user?.username || "User",
-            initial:  (m.user?.username || "U")[0].toUpperCase(),
-            color:    m.user?.avatar?.color || "#7c3aed",
-            status:   "watching",
-            isHost:   room.host === (m.user?._id || m.user),
-          })));
+          setMembers([{
+  id:      currentUser._id || currentUser.id || "me",
+  name:    currentUser.username || "You",
+  initial: (currentUser.username || "Y")[0].toUpperCase(),
+  color:   currentUser.avatar?.color || "#7c3aed",
+  status:  "watching",
+  isHost:  true,
+}]);
         }
 
         // Connect socket
@@ -955,10 +955,15 @@ const addToQueue = async (vid, title) => {
                   {copied?"Copied!":"Copy"}
                 </motion.button>
               </div>
-              <motion.button whileHover={{ scale:1.02 }} whileTap={{ scale:0.97 }}
-                style={{ width:"100%", padding:"11px 0", borderRadius:10, background:"#25D366", border:"none", cursor:"pointer", color:"white", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
-                <MessageCircle size={15}/> Share via WhatsApp
-              </motion.button>
+              <motion.button
+  whileHover={{ scale:1.02 }} whileTap={{ scale:0.97 }}
+  onClick={() => {
+    const msg = `Join my Syncroom watch party! Room code: ${roomCode} — ${window.location.origin}/room`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }}
+  style={{ width:"100%", padding:"11px 0", borderRadius:10, background:"#25D366", border:"none", cursor:"pointer", color:"white", fontSize:12, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", gap:8 }}>
+  <MessageCircle size={15}/> Share via WhatsApp
+</motion.button>
             </motion.div>
           </motion.div>
         )}
