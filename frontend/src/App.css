@@ -1,0 +1,59 @@
+/* App.css */
+:root {
+  --bg-dark: #0a0b14;
+  --bg-sidebar: #12131f;
+  --accent-purple: #7c3aed;
+  --text-main: #ffffff;
+  --text-muted: #94a3b8;
+  --border-color: #1e1e2e;
+}
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.main-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 320px; /* Exact widths from target */
+  grid-template-rows: 60px 1fr; /* Top Navbar height */
+  height: 100vh;
+}
+
+/* Navbar spans the whole top */
+.navbar {
+  grid-column: 1 / 4;
+  background-color: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.sidebar-left {
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.video-content {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.sidebar-right {
+  background-color: var(--bg-sidebar);
+  border-left: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+}
