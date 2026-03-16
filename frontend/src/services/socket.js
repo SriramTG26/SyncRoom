@@ -1,14 +1,17 @@
 import { io } from "socket.io-client";
 
+// This is your live backend URL
 const SOCKET_URL = "https://syncroom-backend-dbz4.onrender.com";
+
 let socket = null;
 
 export const connectSocket = (token) => {
+  // If socket already exists and is connected, don't create a new one
   if (socket?.connected) return socket;
 
   socket = io(SOCKET_URL, {
     auth: { token },
-    transports: ["websocket"],
+    transports: ["websocket", "polling"], // Added polling as a fallback
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
