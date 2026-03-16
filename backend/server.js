@@ -16,7 +16,7 @@ const app = express();
 const httpServer = createServer(app);
 
 const allowedOrigins = [
-  "https://sync-room-gamma.vercel.app",
+  "https://sync-room-xi.vercel.app",
   "http://localhost:5173",
 ];
 
