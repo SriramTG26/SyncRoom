@@ -20,19 +20,15 @@ const allowedOrigins = [
   "http://localhost:5173",
 ];
 
-const io = new Server(server, {
+const io = new Server(httpServer, {  // ✅ Fixed
   cors: {
-    origin: [
-      "https://sync-room-gamma.vercel.app",
-      "http://localhost:5173",
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true,
   },
   transports: ["websocket", "polling"],
 });
 
-// Middleware
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
@@ -40,15 +36,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Routes
 app.use("/api/auth",  authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/rooms", roomRoutes);
 
-// Health check
 app.get("/", (req, res) => res.json({ message: "Syncroom API running ✅" }));
 
-// Socket.io
 initSocket(io);
 
 const PORT = process.env.PORT || 5000;
