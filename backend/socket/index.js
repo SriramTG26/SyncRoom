@@ -3,6 +3,9 @@ import Room from "../models/Room.js";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
+// In-memory room state (persists while server is alive)
+const roomHosts = new Map(); // roomCode -> socket.id of host
+
 export const initSocket = (io) => {
 
   // Auth middleware for socket
@@ -24,7 +27,18 @@ export const initSocket = (io) => {
     // ── JOIN ROOM ──
     socket.on("join-room", async ({ roomCode }) => {
       socket.join(roomCode);
+      socket.data.roomCode = roomCode; // store for disconnect
+
       await User.findByIdAndUpdate(socket.user._id, { isOnline: true });
+
+      // First person in room becomes host
+      const roomSockets = await io.in(roomCode).fetchSockets();
+      if (roomSockets.length === 1) {
+        roomHosts.set(roomCode, socket.id);
+        socket.emit("host-status", { isHost: true });
+      } else {
+        socket.emit("host-status", { isHost: false });
+      }
 
       socket.to(roomCode).emit("user-joined", {
         user: {
@@ -34,7 +48,6 @@ export const initSocket = (io) => {
         },
       });
 
-      // Send system message
       io.to(roomCode).emit("system-message", {
         text: `${socket.user.username} joined the room`,
         time: new Date(),
@@ -55,11 +68,12 @@ export const initSocket = (io) => {
 
         await message.populate("user", "username avatar");
 
+        // ✅ io.to sends to ALL users including sender
         io.to(roomCode).emit("new-message", {
           id: message._id,
           user: message.user.username,
           initial: message.user.username[0].toUpperCase(),
-          color: message.user.avatar.color,
+          color: message.user.avatar?.color,
           text: message.text,
           time: message.createdAt,
         });
@@ -68,36 +82,27 @@ export const initSocket = (io) => {
       }
     });
 
-    // ── VIDEO SYNC ──
+    // ── VIDEO SYNC (host only) ──
+    socket.on("video-change", ({ roomCode, videoId }) => {
+      if (roomHosts.get(roomCode) !== socket.id) return;
+      io.to(roomCode).emit("video-change", { videoId });
+    });
+
     socket.on("video-play", ({ roomCode, timestamp }) => {
+      if (roomHosts.get(roomCode) !== socket.id) return;
+      // socket.to so host doesn't double-trigger
       socket.to(roomCode).emit("video-play", { timestamp });
     });
 
     socket.on("video-pause", ({ roomCode, timestamp }) => {
+      if (roomHosts.get(roomCode) !== socket.id) return;
       socket.to(roomCode).emit("video-pause", { timestamp });
     });
 
     socket.on("video-seek", ({ roomCode, timestamp }) => {
+      if (roomHosts.get(roomCode) !== socket.id) return;
       socket.to(roomCode).emit("video-seek", { timestamp });
     });
-
-    socket.on("video-change", ({ roomCode, videoId }) => {
-  // ✅ io.to broadcasts to ALL users in room including sender
-  io.to(roomCode).emit("video-change", { videoId });
-});// ── Video seek — syncs timestamp for ALL users ──
-socket.on("video-seek", ({ roomCode, timestamp }) => {
-  socket.to(roomCode).emit("video-seek", { timestamp });
-});
-
-// ── Video play sync ──
-socket.on("video-play", ({ roomCode, timestamp }) => {
-  socket.to(roomCode).emit("video-play", { timestamp });
-});
-
-// ── Video pause sync ──
-socket.on("video-pause", ({ roomCode, timestamp }) => {
-  socket.to(roomCode).emit("video-pause", { timestamp });
-});
 
     // ── QUEUE ──
     socket.on("queue-add", ({ roomCode, video }) => {
@@ -138,6 +143,7 @@ socket.on("video-pause", ({ roomCode, timestamp }) => {
         text: `${socket.user.username} left the room`,
         time: new Date(),
       });
+      handleHostTransfer(io, socket, roomCode);
     });
 
     // ── DISCONNECT ──
@@ -147,6 +153,28 @@ socket.on("video-pause", ({ roomCode, timestamp }) => {
         isOnline: false,
         lastSeen: Date.now(),
       });
+
+      const roomCode = socket.data.roomCode;
+      if (roomCode) handleHostTransfer(io, socket, roomCode);
     });
   });
 };
+
+// Transfer host if current host leaves
+async function handleHostTransfer(io, socket, roomCode) {
+  if (roomHosts.get(roomCode) !== socket.id) return;
+
+  const remaining = await io.in(roomCode).fetchSockets();
+  if (remaining.length === 0) {
+    roomHosts.delete(roomCode);
+    return;
+  }
+
+  const newHost = remaining[0];
+  roomHosts.set(roomCode, newHost.id);
+  newHost.emit("host-status", { isHost: true });
+  io.to(roomCode).emit("system-message", {
+    text: `${newHost.data?.username || "Someone"} is now the host`,
+    time: new Date(),
+  });
+}

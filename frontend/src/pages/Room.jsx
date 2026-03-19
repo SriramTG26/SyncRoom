@@ -7,6 +7,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { connectSocket, disconnectSocket, getSocket } from '../services/socket';
+import YouTube from 'react-youtube';
 import { searchYouTube, getVideoTitle } from '../services/api';
 import EmojiPicker from 'emoji-picker-react';
 const COLORS = {
@@ -44,6 +45,8 @@ const playerRef  = useRef(null);
   const [connected,    setConnected]    = useState(false);
   const [isTyping,     setIsTyping]     = useState([]);
   const typingTimer = useRef(null);
+  const [isHost, setIsHost] = useState(false);
+const isSyncingRef = useRef(false);
   const [searchResults,  setSearchResults]  = useState([]);
 const [searching,      setSearching]      = useState(false);
 const [showSearch,     setShowSearch]     = useState(false);
@@ -141,28 +144,36 @@ const emojiRef = useRef(null);
             setMembers(prev => prev.filter(m => m.name !== data.username));
           });
 
-          // ── Video sync ──
-          socket.on("video-play", ({ timestamp }) => {
-  if (playerRef.current?.seekTo) {
-    playerRef.current.seekTo(timestamp, true);
-    playerRef.current.playVideo();
-  }
+          // ── Host status ──
+socket.on("host-status", ({ isHost: hostStatus }) => {
+  setIsHost(hostStatus);
+});
+
+// ── Video sync ──
+socket.on("video-play", ({ timestamp }) => {
+  if (!playerRef.current?.seekTo) return;
+  isSyncingRef.current = true;
+  playerRef.current.seekTo(timestamp, true);
+  playerRef.current.playVideo();
+  setTimeout(() => (isSyncingRef.current = false), 500);
 });
 
 socket.on("video-pause", ({ timestamp }) => {
-  if (playerRef.current?.seekTo) {
-    playerRef.current.seekTo(timestamp, true);
-    playerRef.current.pauseVideo();
-  }
+  if (!playerRef.current?.seekTo) return;
+  isSyncingRef.current = true;
+  playerRef.current.seekTo(timestamp, true);
+  playerRef.current.pauseVideo();
+  setTimeout(() => (isSyncingRef.current = false), 500);
 });
 
           socket.on("video-change", ({ videoId: vid }) => {
   if (vid) setVideoId(vid); // ✅ updates iframe for ALL users
 });
           socket.on("video-seek", ({ timestamp }) => {
-  if (playerRef.current?.seekTo) {
-    playerRef.current.seekTo(timestamp, true);
-  }
+  if (!playerRef.current?.seekTo) return;
+  isSyncingRef.current = true;
+  playerRef.current.seekTo(timestamp, true);
+  setTimeout(() => (isSyncingRef.current = false), 500);
 });
           // ── Queue ──
           socket.on("queue-add", (video) => {
@@ -204,41 +215,7 @@ socket.on("video-pause", ({ timestamp }) => {
     };
   }, []);
 
-  // ── ADD THIS ENTIRE BLOCK RIGHT HERE ──
-useEffect(() => {
-  if (!videoId) return;
-
-  const initPlayer = () => {
-    if (playerRef.current) {
-      playerRef.current.loadVideoById(videoId);
-      return;
-    }
-    if (!window.YT || !window.YT.Player) return;
-    playerRef.current = new window.YT.Player('yt-player', {
-      videoId,
-      playerVars: { rel:0, modestbranding:1, autoplay:1 },
-      events: {
-        onReady: () => console.log("YT Player ready"),
-        onStateChange: (e) => {
-          const socket = getSocket();
-          if (!socket || !roomCode) return;
-          if (e.data === window.YT.PlayerState.PLAYING) {
-            socket.emit("video-play", { roomCode, timestamp: playerRef.current.getCurrentTime() });
-          }
-          if (e.data === window.YT.PlayerState.PAUSED) {
-            socket.emit("video-pause", { roomCode, timestamp: playerRef.current.getCurrentTime() });
-          }
-        },
-      },
-    });
-  };
-
-  if (window.YT && window.YT.Player) {
-    initPlayer();
-  } else {
-    window.onYouTubeIframeAPIReady = initPlayer;
-  }
-}, [videoId]);
+ 
 
 // auto-scroll chat
 useEffect(() => {
@@ -356,8 +333,23 @@ const renderMessageText = (text) => {
 
   return <>{parts}</>;
 };
-  
+  const onPlayerReady = (e) => {
+  playerRef.current = e.target;
+};
 
+const onPlayerStateChange = (e) => {
+  if (isSyncingRef.current) return;
+  if (!isHost) return;
+  const socket = getSocket();
+  if (!socket || !roomCode) return;
+  const timestamp = playerRef.current.getCurrentTime();
+  if (e.data === window.YT.PlayerState.PLAYING) {
+    socket.emit("video-play", { roomCode, timestamp });
+  }
+  if (e.data === window.YT.PlayerState.PAUSED) {
+    socket.emit("video-pause", { roomCode, timestamp });
+  }
+};
   const handleSearch = async () => {
   const trimmed = urlInput.trim();
   if (!trimmed) return;
@@ -386,10 +378,10 @@ const addToQueue = async (vid, title) => {
   };
   setQueue(prev => [...prev, newItem]);
   if (!videoId) {
-    setVideoId(vid);
-    const socket = getSocket();
-    if (socket && roomCode) socket.emit("video-change", { roomCode, videoId: vid });
-  }
+  // Don't setVideoId here — wait for "video-change" echo so ALL users update together
+  const socket = getSocket();
+  if (socket && roomCode) socket.emit("video-change", { roomCode, videoId: vid });
+}
   setShowSearch(false);
   setSearchResults([]);
   setUrlInput('');
@@ -400,12 +392,13 @@ const addToQueue = async (vid, title) => {
 };
 
   const playNow = (vid) => {
-    setVideoId(vid);
-    const socket = getSocket();
-    if (socket && roomCode) {
-      socket.emit("video-change", { roomCode, videoId: vid });
-    }
-  };
+  if (!isHost) return; // only host can change video
+  // Don't setVideoId here — wait for echo back so all users sync
+  const socket = getSocket();
+  if (socket && roomCode) {
+    socket.emit("video-change", { roomCode, videoId: vid });
+  }
+};
 
   const toggleVote = (id) => {
     setVotes(prev => {
@@ -734,19 +727,35 @@ const addToQueue = async (vid, title) => {
           {/* Video — 72% */}
 <div style={{ flex:"0 0 72%", padding:"12px 14px 8px", display:"flex", flexDirection:"column", minHeight:0 }}>
   <div style={{ flex:1, borderRadius:14, overflow:"hidden", background:"#000", border:`1px solid ${COLORS.border}`, boxShadow:`0 0 32px rgba(124,58,237,0.1)`, position:"relative" }}>
-    {videoId ? (
-      <div id="yt-player" style={{ width:"100%", height:"100%" }}/>
-    ) : (
-      <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:COLORS.dim }}>
-        <div style={{ width:52, height:52, borderRadius:14, background:"rgba(124,58,237,0.12)", border:`1px dashed rgba(124,58,237,0.3)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <Play size={20} color={COLORS.purple}/>
-        </div>
-        <div style={{ textAlign:"center" }}>
-          <p style={{ fontSize:13, fontWeight:600, color:COLORS.muted, marginBottom:4 }}>No video playing</p>
-          <p style={{ fontSize:11, color:COLORS.dim }}>Search YouTube above to get started</p>
-        </div>
-      </div>
-    )}
+   {videoId ? (
+  <YouTube
+    videoId={videoId}
+    style={{ width:"100%", height:"100%" }}
+    iframeClassName="w-full h-full"
+    onReady={onPlayerReady}
+    onStateChange={onPlayerStateChange}
+    opts={{
+      width: "100%",
+      height: "100%",
+      playerVars: {
+        autoplay: 1,
+        rel: 0,
+        modestbranding: 1,
+        controls: isHost ? 1 : 0,
+      },
+    }}
+  />
+) : (
+  <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12, color:COLORS.dim }}>
+    <div style={{ width:52, height:52, borderRadius:14, background:"rgba(124,58,237,0.12)", border:`1px dashed rgba(124,58,237,0.3)`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <Play size={20} color={COLORS.purple}/>
+    </div>
+    <div style={{ textAlign:"center" }}>
+      <p style={{ fontSize:13, fontWeight:600, color:COLORS.muted, marginBottom:4 }}>No video playing</p>
+      <p style={{ fontSize:11, color:COLORS.dim }}>Search YouTube above to get started</p>
+    </div>
+  </div>
+)}
   </div>
 </div>
 
