@@ -1,3 +1,4 @@
+import { getRooms } from "../services/api";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -10,7 +11,7 @@ import {
   UserPlus, Info
 } from "lucide-react";
 import PageParticles from "../components/PageParticles";
-import { searchUsers, joinRoom as joinRoomAPI } from "../services/api";
+import { searchUsers, joinRoom as joinRoomAPI, getRooms } from "../services/api";
 
 const C = {
   bg:      "#07040f",
@@ -117,7 +118,7 @@ export default function Dashboard() {
   const [canRename,       setCanRename]       = useState(true);
   const [daysLeft,        setDaysLeft]        = useState(0);
   const [selectedAvatar,  setSelectedAvatar]  = useState(user.avatar?.id || "cosmic");
-
+  const [recentRooms, setRecentRooms] = useState([]);
   const [notifications, setNotifications] = useState([
     { id:1, type:"invite",  from:"Arun",    color:"#7c3aed", title:"Room Invite",     body:"Hey! Join my room tonight 🎬",         time:"2m ago",  read:false, roomCode:"ARUN1" },
     { id:2, type:"invite",  from:"Maya R.", color:"#22d3ee", title:"Room Invite",     body:"Room's open, come watch with us!",      time:"15m ago", read:false, roomCode:"MAYA2" },
@@ -138,7 +139,17 @@ export default function Dashboard() {
     return () => document.removeEventListener("mousedown", handler);
   }, [showNotifs]);
 
-  // rename cooldown
+  useEffect(() => {
+  const fetchRooms = async () => {
+    try {
+      const d = await getRooms();
+      setRecentRooms(d.rooms || []);
+    } catch {
+      setRecentRooms([]);
+    }
+  };
+  fetchRooms();
+}, []);// rename cooldown
   useEffect(() => {
     const last = localStorage.getItem("lastRenamed");
     if (last) {
@@ -663,9 +674,9 @@ export default function Dashboard() {
                   <Clock size={13} color={C.purpleL}/>
                   <span style={{fontSize:10,fontWeight:800,letterSpacing:"0.14em",color:C.dim,textTransform:"uppercase"}}>Recent Rooms</span>
                 </div>
-                <span style={{fontSize:9,color:C.dimmer}}>{RECENT_ROOMS.length} rooms</span>
+               <span style={{fontSize:9,color:C.dimmer}}>{recentRooms.length} rooms</span>
               </div>
-              {RECENT_ROOMS.map((r,i)=>(
+              {recentRooms.map((r,i)=>(
                 <motion.div key={r.code}
                   initial={{opacity:0,x:-8}} animate={{opacity:1,x:0}}
                   transition={{delay:0.4+i*0.08}}
@@ -692,7 +703,7 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.name}</div>
-                      <div style={{fontSize:10,color:C.dim,marginTop:2}}>{r.members} members · {r.ago}</div>
+                      <div style={{fontSize:10,color:C.dim,marginTop:2}}>{r.members?.length || 0} members</div>
                     </div>
                   </div>
                   <span style={{fontSize:9,fontWeight:800,color:C.purpleL,padding:"3px 9px",borderRadius:6,background:"rgba(124,58,237,0.1)",border:"1px solid rgba(124,58,237,0.18)",fontFamily:"monospace",letterSpacing:"0.07em"}}>{r.code}</span>

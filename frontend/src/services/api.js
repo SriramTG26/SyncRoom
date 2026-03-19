@@ -78,3 +78,11 @@ export const searchYouTube = async (query) => {
     return [];
   } catch { return []; }
 };
+
+export const getRooms = async () => {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/api/rooms`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.json();
+};

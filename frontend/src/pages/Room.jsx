@@ -88,11 +88,17 @@ const emojiRef = useRef(null);
         if (token && room.code) {
           const socket = connectSocket(token);
 
-          socket.on("connect", () => {
-            setConnected(true);
-            socket.emit("join-room", { roomCode: room.code });
-          });
+const doJoin = () => {
+  setConnected(true);
+  socket.emit("join-room", { roomCode: room.code });
+};
 
+// If already connected, join immediately
+if (socket.connected) {
+  doJoin();
+} else {
+  socket.on("connect", doJoin);
+}
           socket.on("disconnect", () => setConnected(false));
 
           // ── Chat ──
@@ -370,6 +376,9 @@ const onPlayerStateChange = (e) => {
 const addToQueue = async (vid, title) => {
   if (!vid) return;
   const realTitle = title || (await getVideoTitle(vid))?.title || `Video (${vid.substring(0,8)}…)`;
+  // Only add to queue if a video is already playing
+// First video plays directly, doesn't go to queue
+if (videoId) {
   const newItem = {
     id:    Date.now(),
     vid,
@@ -377,10 +386,15 @@ const addToQueue = async (vid, title) => {
     rank:  queue.length + 1,
   };
   setQueue(prev => [...prev, newItem]);
+}
   if (!videoId) {
-  // Don't setVideoId here — wait for "video-change" echo so ALL users update together
   const socket = getSocket();
-  if (socket && roomCode) socket.emit("video-change", { roomCode, videoId: vid });
+  if (socket && roomCode) {
+    socket.emit("video-change", { roomCode, videoId: vid });
+  } else {
+    // Socket not ready yet, set locally as fallback
+    setVideoId(vid);
+  }
 }
   setShowSearch(false);
   setSearchResults([]);

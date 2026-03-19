@@ -57,8 +57,11 @@ export const initSocket = (io) => {
     // ── CHAT MESSAGE ──
     socket.on("send-message", async ({ roomCode, text }) => {
       try {
-        const room = await Room.findOne({ code: roomCode });
-        if (!room) return;
+        const room = await Room.findOne({ code: roomCode.toUpperCase() });
+if (!room) {
+  console.error(`Room not found for code: ${roomCode}`);
+  return;
+}
 
         const message = await Message.create({
           room: room._id,
@@ -84,10 +87,16 @@ export const initSocket = (io) => {
 
     // ── VIDEO SYNC (host only) ──
     socket.on("video-change", ({ roomCode, videoId }) => {
-      if (roomHosts.get(roomCode) !== socket.id) return;
-      io.to(roomCode).emit("video-change", { videoId });
-    });
-
+  const host = roomHosts.get(roomCode);
+  // Allow if host, OR if no host assigned yet (first video)
+  if (host && host !== socket.id) return;
+  // If no host yet, assign this socket as host
+  if (!host) {
+    roomHosts.set(roomCode, socket.id);
+    socket.emit("host-status", { isHost: true });
+  }
+  io.to(roomCode).emit("video-change", { videoId });
+});
     socket.on("video-play", ({ roomCode, timestamp }) => {
       if (roomHosts.get(roomCode) !== socket.id) return;
       // socket.to so host doesn't double-trigger
