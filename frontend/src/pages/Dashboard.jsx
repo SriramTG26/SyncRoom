@@ -1,4 +1,4 @@
-import { getRooms } from "../services/api";
+import { searchUsers, joinRoom as joinRoomAPI, getRooms } from "../services/api";
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +11,7 @@ import {
   UserPlus, Info
 } from "lucide-react";
 import PageParticles from "../components/PageParticles";
-import { searchUsers, joinRoom as joinRoomAPI, getRooms } from "../services/api";
+
 
 const C = {
   bg:      "#07040f",
